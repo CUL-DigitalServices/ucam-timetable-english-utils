@@ -60,55 +60,83 @@ function get_events_for_year($db, $year) {
     return $events;
 }
 
-function build_timetables_hierarchy($events) {
+function add_event_to_tripos_timetable($event, $timetables) {
+    $module_title = $event['grad_primary'];
+    $substituted_module = substitute_module($event['grad_primary']);
+}
+
+function group_events_by_part($events) {
     $parts = array(
         'prelim_primary' => array(),
         'part1_primary' => array(),
         'part2_primary' => array(),
-        'grad_primary' => array(),
-        'english_research_seminars' => array()
+        'grad_primary' => array()
     );
 
     foreach ($events as $event) {
-        foreach ($parts as $partKey => &$partVal) {
-            $moduleTitleForPart = $event[$partKey];
-            if (!empty($moduleTitleForPart)) {
-                if ($partKey == 'grad_primary') {
-                    if ($moduleTitleForPart == 'research-seminar') {
-                        $parts['english_research_seminars'][substitute_module($moduleTitleForPart)][$event['name']][] = $event;
-                    } else {
-                        $partVal[substitute_module($moduleTitleForPart)][$event['name']][] = $event;
-                    }
-                } else if ($moduleTitleForPart == '7ab') {
-                    $partVal['Paper 7a'][$event['name']][] = $event;
-                    $partVal['Paper 7b'][$event['name']][] = $event;
-                } else {
-                    if ($partKey == 'part1_primary' || $partKey == 'part2_primary' || $partKey == 'prelim_primary') {
-                         if (strcasecmp($moduleTitleForPart, "general") == 0) {
-                            $moduleTitleForPart = "General";
-                        } else {
-                            $moduleTitleForPart = 'Paper ' . $moduleTitleForPart;
-                        }
-                    }
-                    $partVal[$moduleTitleForPart][$event['name']][] = $event;
-                }
+        foreach ($parts as $partName => $partEvents) {
+            if (!empty($event[$partName])) {
+                $parts[$partName][] = $event;
             }
         }
     }
 
-    return array(
-        'english_tripos' => array(
-            'prelim' => $parts['prelim_primary'],
-            'I' => $parts['part1_primary'],
-            'II' => $parts['part2_primary']
-        ),
-        'english_graduates' => array(
-            'graduates' => $parts['grad_primary']
-        ),
-        'english_research_seminars' => array(
-            'research_seminars' => $parts['english_research_seminars']
-        )
+    return $parts;
+}
+
+function build_ug_part_timetable($events, $partName, &$timetables) {
+    $mappedParts = array(
+        'prelim_primary' => 'prelim',
+        'part1_primary' => 'I',
+        'part2_primary' => 'II'
     );
+
+    foreach ($events as $event) {
+        $module_title = $event[$partName];
+        $series_title = $event['name'];
+        if (strcasecmp($module_title, "general") == 0) {
+            $timetables['english-tripos'][$mappedParts[$partName]]['General'][$series_title][] = $event;
+        } else if ($module_title == '7ab') {
+            $timetables['english-tripos'][$mappedParts[$partName]]['Paper 7a'][$series_title][] = $event;
+            $timetables['english-tripos'][$mappedParts[$partName]]['Paper 7b'][$series_title][] = $event;
+        } else {
+            $timetables['english-tripos'][$mappedParts[$partName]]['Paper ' . $module_title][$series_title][] = $event;
+        }
+    }
+}
+
+function build_grad_part_timetable($events, $partName, &$timetables) {
+    foreach ($events as $event) {
+        $eventPartName = substitute_module($event[$partName]);
+        if ($event[$partName] == 'research-seminar') {
+            $timetables['english-research-seminars'][$eventPartName][$eventPartName][$event['name']][] = $event;
+        } else if ($event[$partName] == 'phd') {
+            $timetables['english-phd'][$eventPartName][$eventPartName][$event['name']][] = $event;
+        } else {
+            $timetables[$event[$partName]]['MPhil'][$eventPartName][$event['name']][] = $event;
+        }
+    }
+}
+
+function build_timetables_hierarchy($events) {
+    $parts = group_events_by_part($events);
+
+    $timetables = array();
+
+    foreach ($parts as $partName => $partEvents) {
+        switch ($partName) {
+            case 'prelim_primary':
+            case 'part1_primary':
+            case 'part2_primary':
+                build_ug_part_timetable($partEvents, $partName, $timetables);
+                break;
+            case 'grad_primary':
+                build_grad_part_timetable($partEvents, $partName, $timetables);
+                break;
+        }
+    }
+
+    return $timetables;
 }
 
 function get_event_type_from_name($name) {
