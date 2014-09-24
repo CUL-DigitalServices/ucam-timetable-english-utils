@@ -44,13 +44,20 @@ function get_events_for_year($db, $year) {
 
     $meta = $statement->result_metadata();
 
+    // Build: a) An array $row containing column names from $statement
+    //        b) An array $parameters containing references to each value in $row
     while ($field = $meta->fetch_field()) {
         $parameters[] = &$row[$field->name];
     }
 
+    // Bind each each column in $statement to each value in the $row array
+    // (references to $row values are stored in $parameters).
     call_user_func_array(array($statement, 'bind_result'), $parameters);
 
     while ($statement->fetch()) {
+        // Copy the $row array into a new array $x and store that in $events.
+        // The $row array's values populated on each fetch() call as they're
+        // bound above.
         foreach($row as $key => $val) {
             $x[$key] = $val;
         }
